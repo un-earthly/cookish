@@ -1,13 +1,18 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
-    "slug": "bolt-expo-nativewind",
+    "name": "Cookish",
+    "slug": "cookish",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "cookish",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/icon.png",
+      "backgroundColor": "#061007",
+      "resizeMode": "contain"
+    },
     "ios": {
       "supportsTablet": true
     },
@@ -25,13 +30,18 @@
       "typedRoutes": true
     },
     "android": {
-      "package": "com.anonymous.boltexponativewind"
+      "package": "com.cookish.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#061007"
+      }
     },
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "eb9e98d8-e49b-4e29-9bb1-6335529b8f61"
+        "projectId": "a7a4f13d-048a-479e-a308-0f9cfcc3877f"
       }
-    }
+    },
+    "owner": "normod"
   }
 }
