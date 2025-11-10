@@ -26,6 +26,12 @@ export const colors = {
   error: '#EF5350',    // Red
   warning: '#FFA726',  // Orange
   info: '#42A5F5',     // Blue
+
+  // Additional colors for new components
+  background: '#061007',
+  surface: 'rgba(255, 255, 255, 0.08)',
+  text: '#E8F5E9',
+  border: 'rgba(255, 255, 255, 0.3)'
 };
 
 // Glassmorphism styles
@@ -116,3 +122,22 @@ export const glassStyles = StyleSheet.create({
 // Gradient background positions
 export const gradientColors: readonly [string, string, string] = [colors.gradientStart, colors.gradientMiddle, colors.gradientEnd];
 export const gradientLocations: readonly [number, number, number] = [0, 0.5, 1];
+
+// Complete theme object for new components
+export const theme = {
+  colors: {
+    ...colors,
+    // Ensure all required colors are available
+    background: colors.gradientStart,
+    surface: colors.glassLight,
+    text: colors.textPrimary,
+    textSecondary: colors.textSecondary,
+    border: 'rgba(255, 255, 255, 0.3)',
+    primary: colors.primary,
+    secondary: colors.secondary,
+    success: colors.success,
+    error: colors.error,
+    warning: colors.warning,
+    info: colors.info
+  }
+};

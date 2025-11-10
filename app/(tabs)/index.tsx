@@ -12,13 +12,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Recipe } from '@/types/recipe';
 import { RecipeCard } from '@/components/RecipeCard';
+import { ServiceStatusIndicator } from '@/components/ServiceStatusIndicator';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import {
   generateDailyRecipes,
   getRecipesForDate,
   toggleFavorite,
 } from '@/services/recipeService';
 import { useRecipeRefresh } from '@/hooks/useRecipeRefresh';
-import { RefreshCw, ChefHat } from 'lucide-react-native';
+import { useAppIntegration } from '@/hooks/useAppIntegration';
+import { useAI } from '@/contexts/AIContext';
+import { RefreshCw, ChefHat, AlertTriangle } from 'lucide-react-native';
 import { colors, glassStyles, gradientColors, gradientLocations } from '@/styles/theme';
 
 export default function HomeScreen() {
@@ -27,6 +31,18 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [generating, setGenerating] = useState(false);
+
+  const {
+    isInitialized,
+    serviceHealth,
+    error: integrationError,
+    clearError
+  } = useAppIntegration();
+
+  const {
+    canGenerateRecipes,
+    isAIReady
+  } = useAI();
 
   const today = new Date().toISOString().split('T')[0];
   const todayFormatted = new Date().toLocaleDateString('en-US', {
@@ -38,11 +54,24 @@ export default function HomeScreen() {
   const loadRecipes = async () => {
     try {
       setError('');
+
+      // Clear any integration errors
+      if (integrationError) {
+        clearError();
+      }
+
       const existingRecipes = await getRecipesForDate(today);
 
       if (existingRecipes.length === 3) {
         setRecipes(existingRecipes);
       } else {
+        // Check if we can generate recipes
+        if (!canGenerateRecipes) {
+          setError('Recipe generation is currently unavailable. Please check your settings or try again later.');
+          setRecipes(existingRecipes); // Show any existing recipes
+          return;
+        }
+
         setGenerating(true);
         const newRecipes = await generateDailyRecipes(false);
         setRecipes(newRecipes);
@@ -64,6 +93,12 @@ export default function HomeScreen() {
   };
 
   const handleRegenerate = async () => {
+    // Check if we can generate recipes
+    if (!canGenerateRecipes) {
+      setError('Recipe generation is currently unavailable. Please check your settings or try again later.');
+      return;
+    }
+
     setGenerating(true);
     setError('');
     try {
@@ -90,8 +125,11 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    loadRecipes();
-  }, []);
+    // Only load recipes after services are initialized
+    if (isInitialized) {
+      loadRecipes();
+    }
+  }, [isInitialized]);
 
   if (loading) {
     return (
@@ -128,68 +166,91 @@ export default function HomeScreen() {
   }
 
   return (
-    <LinearGradient
-      colors={gradientColors}
-      locations={gradientLocations}
-      style={styles.container}
-    >
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#fff" />
-        }
+    <ErrorBoundary>
+      <LinearGradient
+        colors={gradientColors}
+        locations={gradientLocations}
+        style={styles.container}
       >
-        <BlurView intensity={30} tint="light" style={styles.header}>
-          <View>
-            <View style={styles.titleRow}>
-              <ChefHat size={32} color="#fff" />
-              <Text style={styles.title}>Today's Menu</Text>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#fff" />
+          }
+        >
+          <BlurView intensity={30} tint="light" style={styles.header}>
+            <View>
+              <View style={styles.titleRow}>
+                <ChefHat size={32} color="#fff" />
+                <Text style={styles.title}>Today's Menu</Text>
+              </View>
+              <Text style={styles.date}>{todayFormatted}</Text>
             </View>
-            <Text style={styles.date}>{todayFormatted}</Text>
-          </View>
-          <TouchableOpacity
-            onPress={handleRegenerate}
-            disabled={generating}
-            style={styles.regenerateButton}
-          >
-            {generating ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <RefreshCw size={24} color="#fff" />
-            )}
-          </TouchableOpacity>
-        </BlurView>
-
-        {error && (
-          <BlurView intensity={20} tint="light" style={styles.errorBanner}>
-            <Text style={styles.errorBannerText}>{error}</Text>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                onPress={handleRegenerate}
+                disabled={generating || !canGenerateRecipes}
+                style={[
+                  styles.regenerateButton,
+                  (!canGenerateRecipes) && styles.regenerateButtonDisabled
+                ]}
+              >
+                {generating ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <RefreshCw size={24} color="#fff" />
+                )}
+              </TouchableOpacity>
+            </View>
           </BlurView>
-        )}
 
-        {generating && recipes.length === 0 ? (
-          <View style={styles.generatingContainer}>
-            <ActivityIndicator size="large" color="#fff" />
-            <Text style={styles.generatingText}>
-              Generating your personalized recipes...
-            </Text>
-            <Text style={styles.generatingSubtext}>
-              This may take a moment
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.recipesContainer}>
-            {recipes.map((recipe) => (
-              <RecipeCard
-                key={recipe.id}
-                recipe={recipe}
-                onToggleFavorite={() => handleToggleFavorite(recipe.id)}
-              />
-            ))}
-          </View>
-        )}
-      </ScrollView>
-    </LinearGradient>
+          {/* Service Status */}
+          {serviceHealth && serviceHealth.overall !== 'healthy' && (
+            <ServiceStatusIndicator showDetails />
+          )}
+
+          {/* Integration Error */}
+          {integrationError && (
+            <BlurView intensity={20} tint="light" style={styles.errorBanner}>
+              <AlertTriangle size={16} color={colors.error} />
+              <Text style={styles.errorBannerText}>{integrationError}</Text>
+              <TouchableOpacity onPress={clearError}>
+                <Text style={styles.dismissText}>Dismiss</Text>
+              </TouchableOpacity>
+            </BlurView>
+          )}
+
+          {error && (
+            <BlurView intensity={20} tint="light" style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>{error}</Text>
+            </BlurView>
+          )}
+
+          {generating && recipes.length === 0 ? (
+            <View style={styles.generatingContainer}>
+              <ActivityIndicator size="large" color="#fff" />
+              <Text style={styles.generatingText}>
+                Generating your personalized recipes...
+              </Text>
+              <Text style={styles.generatingSubtext}>
+                This may take a moment
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.recipesContainer}>
+              {recipes.map((recipe) => (
+                <RecipeCard
+                  key={recipe.id}
+                  recipe={recipe}
+                  onToggleFavorite={() => handleToggleFavorite(recipe.id)}
+                />
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      </LinearGradient>
+    </ErrorBoundary>
   );
 }
 
@@ -239,9 +300,22 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
     marginTop: 4,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   regenerateButton: {
     ...glassStyles.glassButton,
     padding: 12,
+  },
+  regenerateButtonDisabled: {
+    opacity: 0.5,
+  },
+  dismissText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
   },
   recipesContainer: {
     gap: 16,

@@ -1,14 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   Modal,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
+  Alert,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { X, Grid2X2, Grid3X3, Maximize2 } from 'lucide-react-native';
+import {
+  X,
+  Smartphone,
+  Tablet,
+  Monitor,
+  Home
+} from 'lucide-react-native';
 import { colors, glassStyles } from '@/styles/theme';
 
 interface WidgetModeModalProps {
@@ -20,82 +26,72 @@ interface WidgetModeModalProps {
 export function WidgetModeModal({
   visible,
   onClose,
-  onSelectMode,
+  onSelectMode
 }: WidgetModeModalProps) {
+  const handleModeSelect = (mode: 'small' | 'large' | 'horizontal' | 'close') => {
+    onSelectMode(mode);
+  };
+
   return (
     <Modal
       visible={visible}
-      transparent
-      animationType="fade"
+      animationType="slide"
+      transparent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <BlurView intensity={40} tint="dark" style={styles.blurOverlay}>
-          <View style={styles.modalContainer}>
-            <BlurView intensity={30} tint="light" style={styles.modalContent}>
-              <View style={styles.header}>
-                <Text style={styles.title}>Switch to Widget Mode?</Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                  <X size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
+      <View style={styles.modalOverlay}>
+        <BlurView intensity={30} tint="dark" style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Widget Mode</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <X size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
 
-              <Text style={styles.subtitle}>
-                Keep your recipes accessible on your home screen
-              </Text>
+            <Text style={styles.modalSubtitle}>
+              Choose how you want to display the app on your home screen
+            </Text>
 
-              <View style={styles.optionsContainer}>
-                <TouchableOpacity
-                  style={styles.option}
-                  onPress={() => onSelectMode('small')}
-                  activeOpacity={0.7}
-                >
-                  <BlurView intensity={20} tint="light" style={styles.optionContent}>
-                    <Grid2X2 size={32} color={colors.primary} />
-                    <Text style={styles.optionTitle}>2×2 Widget</Text>
-                    <Text style={styles.optionDescription}>
-                      Compact view with today's recipe
-                    </Text>
-                  </BlurView>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.option}
-                  onPress={() => onSelectMode('large')}
-                  activeOpacity={0.7}
-                >
-                  <BlurView intensity={20} tint="light" style={styles.optionContent}>
-                    <Grid3X3 size={32} color={colors.primary} />
-                    <Text style={styles.optionTitle}>4×4 Widget</Text>
-                    <Text style={styles.optionDescription}>
-                      Full view with all 3 recipes
-                    </Text>
-                  </BlurView>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.option, styles.horizontalOption]}
-                  onPress={() => onSelectMode('horizontal')}
-                  activeOpacity={0.7}
-                >
-                  <BlurView intensity={20} tint="light" style={styles.optionContent}>
-                    <Maximize2 size={32} color={colors.primary} />
-                    <Text style={styles.optionTitle}>Horizontal Widget</Text>
-                    <Text style={styles.optionDescription}>
-                      Wide view across screen
-                    </Text>
-                  </BlurView>
-                </TouchableOpacity>
-              </View>
+            {/* Widget Options */}
+            <View style={styles.optionsContainer}>
+              <TouchableOpacity
+                style={styles.optionButton}
+                onPress={() => handleModeSelect('small')}
+              >
+                <Smartphone size={32} color={colors.primary} />
+                <Text style={styles.optionTitle}>Small Widget</Text>
+                <Text style={styles.optionDescription}>2×2 compact view</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.closeAppButton}
-                onPress={() => onSelectMode('close')}
-                activeOpacity={0.8}
+                style={styles.optionButton}
+                onPress={() => handleModeSelect('large')}
               >
-                <Text style={styles.closeAppText}>Close App Completely</Text>
+                <Tablet size={32} color={colors.primary} />
+                <Text style={styles.optionTitle}>Large Widget</Text>
+                <Text style={styles.optionDescription}>4×4 detailed view</Text>
               </TouchableOpacity>
-            </BlurView>
+
+              <TouchableOpacity
+                style={styles.optionButton}
+                onPress={() => handleModeSelect('horizontal')}
+              >
+                <Monitor size={32} color={colors.primary} />
+                <Text style={styles.optionTitle}>Horizontal Widget</Text>
+                <Text style={styles.optionDescription}>Wide landscape view</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.optionButton, styles.closeOptionButton]}
+                onPress={() => handleModeSelect('close')}
+              >
+                <Home size={32} color={colors.error} />
+                <Text style={[styles.optionTitle, { color: colors.error }]}>Close App</Text>
+                <Text style={styles.optionDescription}>Exit completely</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </BlurView>
       </View>
@@ -104,83 +100,67 @@ export function WidgetModeModal({
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  modalOverlay: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  blurOverlay: {
-    flex: 1,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
   },
   modalContainer: {
-    width: '100%',
+    width: '90%',
     maxWidth: 400,
-  },
-  modalContent: {
-    ...glassStyles.glassContainer,
-    padding: 24,
+    borderRadius: 16,
     overflow: 'hidden',
   },
-  header: {
+  modalContent: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 24,
+  },
+  modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
-  title: {
-    fontSize: 24,
+  modalTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    color: '#fff',
+    color: colors.textPrimary,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 24,
+    textAlign: 'center',
   },
   closeButton: {
     padding: 4,
   },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 24,
-  },
   optionsContainer: {
-    gap: 12,
-    marginBottom: 20,
+    gap: 16,
   },
-  option: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  horizontalOption: {
-    // Additional styling if needed
-  },
-  optionContent: {
-    ...glassStyles.glassCard,
-    alignItems: 'center',
+  optionButton: {
+    backgroundColor: colors.glassLight,
+    borderRadius: 12,
     padding: 20,
-    gap: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  closeOptionButton: {
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
   optionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
-    marginTop: 8,
-  },
-  optionDescription: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'center',
-  },
-  closeAppButton: {
-    ...glassStyles.glassButton,
-    padding: 16,
-    alignItems: 'center',
-    borderColor: 'rgba(239, 83, 80, 0.5)',
-  },
-  closeAppText: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: colors.textPrimary,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  optionDescription: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
 });
