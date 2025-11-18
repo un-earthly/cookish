@@ -39,7 +39,7 @@ export function useAppIntegration() {
     });
 
     // Initialize services
-    const initialize = useCallback(async () => {
+    const initialize = useCallback(async (userId?: string) => {
         if (state.isInitializing || state.isInitialized) {
             return;
         }
@@ -47,7 +47,7 @@ export function useAppIntegration() {
         setState(prev => ({ ...prev, isInitializing: true, error: null }));
 
         try {
-            await appIntegrationService.initialize();
+            await appIntegrationService.initialize(userId);
 
             // Get initial service health and features
             const [health, features] = await Promise.all([
@@ -207,10 +207,7 @@ export function useAppIntegration() {
         }
     }, [refreshServiceStatus]);
 
-    // Initialize on mount
-    useEffect(() => {
-        initialize();
-    }, [initialize]);
+    // Note: Don't auto-initialize on mount - let the caller provide user context
 
     // Listen to app state changes
     useEffect(() => {

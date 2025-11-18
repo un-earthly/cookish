@@ -32,7 +32,7 @@ export class AppIntegrationService {
     /**
      * Initialize all services and dependencies
      */
-    async initialize(): Promise<void> {
+    async initialize(userId?: string): Promise<void> {
         if (this.isInitialized) {
             return;
         }
@@ -41,19 +41,24 @@ export class AppIntegrationService {
             return this.initializationPromise;
         }
 
-        this.initializationPromise = this.performInitialization();
+        this.initializationPromise = this.performInitialization(userId);
         await this.initializationPromise;
     }
 
-    private async performInitialization(): Promise<void> {
+    private async performInitialization(userId?: string): Promise<void> {
         try {
             console.log('Initializing app integration services...');
 
-            // Check authentication
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                throw new Error('User not authenticated');
+            // Check authentication - use provided userId or fetch from Supabase
+            if (!userId) {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    throw new Error('User not authenticated');
+                }
+                userId = user.id;
             }
+
+            console.log('Authenticated user ID:', userId);
 
             // Initialize core services in order
             await this.initializeCoreServices();

@@ -6,13 +6,13 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { AIProvider } from '@/contexts/AIContext';
 import { NavigationProvider } from '@/contexts/NavigationContext';
 import { AppStateProvider } from '@/contexts/AppStateContext';
-import { View, ActivityIndicator, Text } from 'react-native';
+import { ActivityIndicator, Text } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { initializeCache } from '@/services/cacheInitializer';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAppIntegration } from '@/hooks/useAppIntegration';
 import { useErrorHandling } from '@/hooks/useErrorHandling';
-import { colors, gradientColors, gradientLocations } from '@/styles/theme';
+import { gradientColors, gradientLocations } from '@/styles/theme';
 
 function RootLayoutNav() {
   const { user, loading } = useAuth();
@@ -21,14 +21,12 @@ function RootLayoutNav() {
     isInitialized,
     isInitializing,
     error: integrationError,
-    serviceHealth,
-    clearError
+    serviceHealth
   } = useAppIntegration();
 
   const {
     handleError,
     errorState,
-    clearError: clearHandlingError,
     createErrorBoundaryHandler
   } = useErrorHandling();
 
@@ -45,14 +43,14 @@ function RootLayoutNav() {
 
   // Initialize services when user is authenticated
   useEffect(() => {
-    if (user && !loading) {
+    if (user && !loading && !isInitializing && !isInitialized) {
       const initializeServices = async () => {
         try {
           // Initialize legacy cache service
           await initializeCache();
 
-          // Initialize integrated services
-          await initialize();
+          // Initialize integrated services with user ID
+          await initialize(user.id);
         } catch (error) {
           console.error('Failed to initialize services:', error);
           await handleError(error as Error, {
@@ -64,7 +62,7 @@ function RootLayoutNav() {
 
       initializeServices();
     }
-  }, [user, loading, initialize, handleError]);
+  }, [user, loading, isInitializing, isInitialized, initialize, handleError]);
 
   // Handle integration errors
   useEffect(() => {
