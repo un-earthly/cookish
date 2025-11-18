@@ -2,11 +2,15 @@ import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { generateDailyRecipes } from '@/services/recipeService';
 
-export function useRecipeRefresh(onRefresh?: () => void) {
+export function useRecipeRefresh(onRefresh?: () => void, enabled: boolean = true) {
   const appState = useRef(AppState.currentState);
   const lastCheckDate = useRef<string>(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const checkAndRefreshRecipes = async () => {
       const today = new Date().toISOString().split('T')[0];
 
@@ -44,5 +48,5 @@ export function useRecipeRefresh(onRefresh?: () => void) {
       subscription.remove();
       clearInterval(interval);
     };
-  }, [onRefresh]);
+  }, [onRefresh, enabled]);
 }

@@ -39,7 +39,7 @@ export default function HomeScreen() {
     clearError
   } = useAppIntegration();
 
-  const {
+  const { 
     canGenerateRecipes,
     isAIReady
   } = useAI();
@@ -80,11 +80,11 @@ export default function HomeScreen() {
       setError(err.message || 'Failed to load recipes');
     } finally {
       setLoading(false);
-      setGenerating(false);
+      setGenerating(false); 
     }
   };
 
-  useRecipeRefresh(loadRecipes);
+  useRecipeRefresh(loadRecipes, isAIReady);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -125,11 +125,11 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    // Only load recipes after services are initialized
-    if (isInitialized) {
+    // Only load recipes after services are initialized and AI is ready
+    if (isInitialized && isAIReady) {
       loadRecipes();
     }
-  }, [isInitialized]);
+  }, [isInitialized, isAIReady]);
 
   if (loading) {
     return (

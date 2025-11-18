@@ -4,29 +4,31 @@ import {
     Text,
     StyleSheet,
     ScrollView,
-    TextInput,
     TouchableOpacity,
-    KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Send, MessageCircle, AlertTriangle } from 'lucide-react-native';
+import { MessageCircle, AlertTriangle, Wifi, WifiOff } from 'lucide-react-native';
 import { colors, glassStyles, gradientColors, gradientLocations } from '@/styles/theme';
 import { ChatMessage, Recipe } from '@/types/recipe';
 import { ChatInterface } from '@/components/ChatInterface';
-import { VoiceRecordButton } from '@/components/VoiceRecordButton';
+import { ChatComposer } from '@/components/ChatComposer';
 import { ServiceStatusIndicator } from '@/components/ServiceStatusIndicator';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { chatService } from '@/services/chatService';
+import { llamaService, LlamaModel } from '@/services/llamaService';
 import { useAI } from '@/contexts/AIContext';
 import { useNavigation } from '@/contexts/NavigationContext';
 
 export default function ChatScreen() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [inputText, setInputText] = useState('');
+    const [selectedModel, setSelectedModel] = useState<LlamaModel | null>(null);
+    const [isModelReady, setIsModelReady] = useState(false);
+    const [useOfflineMode, setUseOfflineMode] = useState(false);
     const scrollViewRef = useRef<ScrollView>(null);
 
     const {
@@ -39,10 +41,68 @@ export default function ChatScreen() {
         aiError,
         clearAIError,
         processVoiceInput,
-        setProcessingState
+        setProcessingState,
+        setIsProcessing
     } = useAI();
 
     const { setChatBadgeCount } = useNavigation();
+
+    // Initialize model when selected
+    useEffect(() => {
+        if (selectedModel && !isModelReady) {
+            initializeModel(selectedModel);
+        }
+    }, [selectedModel]);
+
+    const initializeModel = async (model: LlamaModel) => {
+        try {
+            setIsProcessing(true);
+            const success = await llamaService.initialize(model);
+            setIsModelReady(success);
+
+            if (success) {
+                setUseOfflineMode(true);
+                Alert.alert(
+                    'Model Ready',
+                    `${model.displayName} is now ready for offline use!`,
+                    [{ text: 'OK' }]
+                );
+            } else {
+                Alert.alert(
+                    'Model Error',
+                    'Failed to initialize the model. Please try again.',
+                    [{ text: 'OK' }]
+                );
+            }
+        } catch (error) {
+            console.error('Failed to initialize model:', error);
+            Alert.alert('Error', 'Failed to initialize the model');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleModelSelect = async (model: LlamaModel) => {
+        // Check if model is downloaded
+        const isDownloaded = await llamaService.isModelDownloaded(model);
+
+        if (!isDownloaded) {
+            Alert.alert(
+                'Model Not Downloaded',
+                'Please download this model first before selecting it.',
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+
+        // If switching models, cleanup old one first
+        if (selectedModel && selectedModel.id !== model.id) {
+            await llamaService.cleanup();
+            setIsModelReady(false);
+        }
+
+        setSelectedModel(model);
+    };
 
     // Initialize chat session and load messages
     useEffect(() => {
@@ -83,17 +143,19 @@ export default function ChatScreen() {
         }
     };
 
-    const handleSendMessage = async (text?: string, voiceInput: boolean = false) => {
-        const messageText = text || inputText.trim();
+    const handleSendMessage = async (messageText: string) => {
         if (!messageText || isProcessing || !currentSession) return;
 
-        // Check if we can generate recipes
-        if (!canGenerateRecipes) {
+        // Determine if using offline or online mode
+        const useOffline = useOfflineMode && isModelReady && selectedModel;
+
+        // Check if we can generate recipes (online mode)
+        if (!useOffline && !canGenerateRecipes) {
             const errorMessage: ChatMessage = {
                 id: `msg_${Date.now()}`,
                 session_id: currentSession.id,
                 role: 'assistant',
-                content: "I'm sorry, recipe generation is currently unavailable. Please check your settings or try again later.",
+                content: "I'm sorry, recipe generation is currently unavailable. Please select an offline model or check your settings.",
                 voice_input: false,
                 created_at: new Date().toISOString()
             };
@@ -101,19 +163,62 @@ export default function ChatScreen() {
             return;
         }
 
-        setInputText('');
-
         try {
-            // Process message using chat service with AI context integration
-            const { userMsg, assistantMsg } = await chatService.processUserMessage(
+            // Add user message
+            const userMsg = await chatService.addMessage(
                 currentSession.id,
-                messageText,
-                voiceInput,
-                (state) => setProcessingState(state)
+                'user',
+                messageText
+            );
+            setMessages(prev => [...prev, userMsg]);
+
+            setIsProcessing(true);
+            setProcessingState({
+                isListening: false,
+                isTranscribing: false,
+                isGenerating: true,
+                currentStep: useOffline ? 'Processing with offline model...' : 'Generating recipe...'
+            });
+
+            let responseText: string;
+
+            if (useOffline) {
+                // Use offline LLM
+                responseText = await llamaService.streamCompletion(
+                    [
+                        {
+                            role: 'system',
+                            content: 'You are a helpful cooking assistant. Create recipes based on user requests. Be concise and friendly.'
+                        },
+                        {
+                            role: 'user',
+                            content: messageText
+                        }
+                    ],
+                    (token) => {
+                        // Stream tokens in real-time
+                        console.log('Token:', token);
+                    }
+                );
+            } else {
+                // Use online service through chat service
+                const { assistantMsg } = await chatService.processUserMessage(
+                    currentSession.id,
+                    messageText,
+                    false,
+                    (state) => setProcessingState(state)
+                );
+                responseText = assistantMsg.content;
+            }
+
+            // Add assistant message
+            const assistantMsg = await chatService.addMessage(
+                currentSession.id,
+                'assistant',
+                responseText
             );
 
-            // Update messages
-            setMessages(prev => [...prev, userMsg, assistantMsg]);
+            setMessages(prev => [...prev, assistantMsg]);
 
             // Clear chat badge since user is actively using chat
             setChatBadgeCount(0);
@@ -121,7 +226,7 @@ export default function ChatScreen() {
         } catch (error) {
             console.error('Failed to process message:', error);
 
-            // Add error message manually if chat service fails
+            // Add error message
             const errorMessage: ChatMessage = {
                 id: `msg_${Date.now()}`,
                 session_id: currentSession.id,
@@ -132,6 +237,14 @@ export default function ChatScreen() {
             };
 
             setMessages(prev => [...prev, errorMessage]);
+        } finally {
+            setIsProcessing(false);
+            setProcessingState({
+                isListening: false,
+                isTranscribing: false,
+                isGenerating: false,
+                currentStep: ''
+            });
         }
     };
 
@@ -247,67 +360,55 @@ export default function ChatScreen() {
                         </BlurView>
                     )}
 
-                    {/* Chat Messages */}
-                    <KeyboardAvoidingView
-                        style={styles.chatContainer}
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-                    >
-                        <ScrollView
-                            ref={scrollViewRef}
-                            style={styles.messagesContainer}
-                            contentContainerStyle={styles.messagesContent}
-                            showsVerticalScrollIndicator={false}
-                        >
-                            <ChatInterface
-                                messages={messages}
-                                isProcessing={isProcessing}
-                                processingState={processingState}
-                                onSaveRecipe={handleSaveRecipe}
-                                onModifyRecipe={handleModifyRecipe}
-                                sessionId={currentSession?.id}
-                            />
-                        </ScrollView>
-
-                        {/* Input Area */}
-                        <BlurView intensity={30} tint="light" style={styles.inputContainer}>
-                            <View style={styles.inputRow}>
-                                <TextInput
-                                    style={styles.textInput}
-                                    value={inputText}
-                                    onChangeText={setInputText}
-                                    placeholder="Ask me to create a recipe..."
-                                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
-                                    multiline
-                                    maxLength={500}
-                                    editable={!isProcessing}
-                                />
-
-                                <View style={styles.buttonRow}>
-                                    <VoiceRecordButton
-                                        onTranscript={handleVoiceInput}
-                                        disabled={isProcessing || !canUseVoice || !canGenerateRecipes}
-                                        processingState={processingState}
-                                    />
-
-                                    <TouchableOpacity
-                                        style={[
-                                            styles.sendButton,
-                                            (!inputText.trim() || isProcessing) && styles.sendButtonDisabled
-                                        ]}
-                                        onPress={() => handleSendMessage()}
-                                        disabled={!inputText.trim() || isProcessing || !canGenerateRecipes}
-                                    >
-                                        {isProcessing ? (
-                                            <ActivityIndicator size="small" color="#fff" />
-                                        ) : (
-                                            <Send size={20} color="#fff" />
-                                        )}
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
+                    {/* Mode Indicator */}
+                    {useOfflineMode && isModelReady && (
+                        <BlurView intensity={20} tint="light" style={styles.modeBanner}>
+                            <WifiOff size={16} color={colors.primary} />
+                            <Text style={styles.modeBannerText}>
+                                Offline Mode: {selectedModel?.displayName}
+                            </Text>
                         </BlurView>
-                    </KeyboardAvoidingView>
+                    )}
+
+                    {!useOfflineMode && isAIReady && (
+                        <BlurView intensity={20} tint="light" style={styles.modeBanner}>
+                            <Wifi size={16} color={colors.primary} />
+                            <Text style={styles.modeBannerText}>Online Mode</Text>
+                        </BlurView>
+                    )}
+
+                    {/* Chat Messages */}
+                    <ScrollView
+                        ref={scrollViewRef}
+                        style={styles.messagesContainer}
+                        contentContainerStyle={styles.messagesContent}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        <ChatInterface
+                            messages={messages}
+                            isProcessing={isProcessing}
+                            processingState={processingState}
+                            onSaveRecipe={handleSaveRecipe}
+                            onModifyRecipe={handleModifyRecipe}
+                            sessionId={currentSession?.id}
+                        />
+                    </ScrollView>
+
+                    {/* Chat Composer */}
+                    <ChatComposer
+                        onSend={handleSendMessage}
+                        onVoicePress={canUseVoice ? () => handleVoiceInput('') : undefined}
+                        selectedModel={selectedModel}
+                        onModelSelect={handleModelSelect}
+                        disabled={isProcessing}
+                        showVoiceButton={canUseVoice}
+                        showModelSelector={true}
+                        placeholder={
+                            useOfflineMode
+                                ? 'Chat with offline AI...'
+                                : 'Ask me to create a recipe...'
+                        }
+                    />
                 </SafeAreaView>
             </LinearGradient>
         </ErrorBoundary>
@@ -356,6 +457,22 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
     },
+    modeBanner: {
+        ...glassStyles.glassCard,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginHorizontal: 16,
+        marginTop: 8,
+        marginBottom: 8,
+        padding: 10,
+    },
+    modeBannerText: {
+        flex: 1,
+        color: colors.primary,
+        fontSize: 13,
+        fontWeight: '600',
+    },
     headerTitle: {
         fontSize: 20,
         fontWeight: '700',
@@ -366,49 +483,11 @@ const styles = StyleSheet.create({
         color: 'rgba(255, 255, 255, 0.8)',
         marginTop: 2,
     },
-    chatContainer: {
-        flex: 1,
-    },
     messagesContainer: {
         flex: 1,
     },
     messagesContent: {
         padding: 16,
         paddingBottom: 8,
-    },
-    inputContainer: {
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255, 255, 255, 0.2)',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    inputRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        gap: 12,
-    },
-    textInput: {
-        flex: 1,
-        ...glassStyles.glassInput,
-        maxHeight: 100,
-        minHeight: 44,
-        textAlignVertical: 'top',
-    },
-    buttonRow: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    sendButton: {
-        ...glassStyles.glassButton,
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: colors.primary,
-    },
-    sendButtonDisabled: {
-        backgroundColor: colors.glassLight,
-        opacity: 0.5,
     },
 });
